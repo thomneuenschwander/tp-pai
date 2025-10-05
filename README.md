@@ -10,7 +10,7 @@ cd tp-pai
 
 python -m venv venv # criar virtual environment
 
-pip install -r requirements.tx # instalar dependencies
+pip install -r requirements.txt # instalar dependencies
 
 python .\spec.py 802717 805496 814939 814143 # visualizar o escopo do projeto com base nos números de matrícula dos componentes do grupo
 

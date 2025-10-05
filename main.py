@@ -167,21 +167,6 @@ class GUI:
     def run(self):
         self.root.mainloop()
         
-        
-def load_csv(filepath: str) -> pd.DataFrame:
-    try:
-        df = pd.read_csv(filepath, sep=';') 
-        df.set_index('MRI ID', inplace=True)
-        for col in ['nWBV', 'MMSE', 'CDR']:
-            if df[col].dtype == 'object': # se a coluna for texto, converte para float
-                df[col] = pd.to_numeric(df[col].str.replace(',', '.', regex=False), errors='coerce')
-        
-        return df
-    except FileNotFoundError:
-        messagebox.showerror("Error", f"Arquivo {filepath} não encontrado!")
-        return None
-        
-        
 def prepare_and_split_data(df: pd.DataFrame, output_dir: str):
     """
     - Converted -> Demented: se CDR <= 0
@@ -237,12 +222,13 @@ if __name__ == "__main__":
     val_path = os.path.join(DATASET_DIR, 'validation_set.csv')
     test_path = os.path.join(DATASET_DIR, 'test_set.csv')
     
-    all_df = load_csv(raw_path)
+    all_df = df = pd.read_csv(raw_path, sep=';', decimal=',', index_col='MRI ID')
+    
     
     if is_dataset_split(train_path, val_path, test_path):
-        train_df = load_csv(train_path)
-        validation_df = load_csv(val_path)
-        test_df = load_csv(test_path)
+        train_df = pd.read_csv(train_path, index_col='MRI ID')
+        validation_df = pd.read_csv(val_path, index_col='MRI ID')
+        test_df = pd.read_csv(test_path, index_col='MRI ID')
     else:
         train_df, validation_df, test_df = prepare_and_split_data(all_df, output_dir=DATASET_DIR)
 
