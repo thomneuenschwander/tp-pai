@@ -9,6 +9,7 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
+from typing import Optional
 
 class EDA:
     def __init__(self, df, out_dir="./statistics"):
@@ -80,43 +81,69 @@ class EDA:
 
 
 class GUI:
-    def __init__(self, df):
+    def __init__(self, df: pd.DataFrame):
         self.df = df
         
+        # BASE WINDOW
         self.root = tk.Tk()
         self.root.title("Processamento e Análise de Imagens - Trabalho Prático")
         self.root.geometry("800x450")
         
-        self.image_label = tk.Label(self.root)
-        self.info_frame = tk.Frame(self.root)
-        
-        tk.Label(self.info_frame, text="Informações do Paciente", font=("Helvetica", 12, "bold")).pack(anchor="w", pady=(0, 10))
+        # IMAGE HANDLING
+        self.image: Optional[Image.Image] = None
+        self.zoom_factor = 1.0
+        self.min_zoom = 0.5
+        self.max_zoom = 3.0
 
-        self.info_vars = {
+        # FRAMES
+        image_frame = tk.Frame(
+            master=self.root,
+            bd=2,
+        )
+        info_frame = tk.Frame(
+            master=self.root,
+            bd=2,
+        )
+        image_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        info_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+        
+        # WIDGETS LEFT FRAME
+        self.image_label = tk.Label(master=image_frame, text="Abra uma imagem", font=("Helvetica", 16), bg="#B1B1B1", fg="white")
+        self.image_label.pack(fill="both", expand=True)
+        
+        # WIDGETS RIGHT FRAME
+        info_title = tk.Label(
+            master=info_frame,
+            text="Informações do Paciente",
+            font=("Helvetica", 18, "bold")
+        )
+        info_title.grid(row=0, column=0, columnspan=2, pady=(10, 20))
+
+        self.info = {
             "Group": tk.StringVar(value="N/A"),
             "Age": tk.StringVar(value="N/A"),
             "M/F": tk.StringVar(value="N/A"),
             "MMSE": tk.StringVar(value="N/A"),
             "CDR": tk.StringVar(value="N/A")
         }
+    
+        for i, (key, value) in enumerate(self.info.items()):
+            key_label = tk.Label(master=info_frame, text=f"{key}:", font=("Helvetica", 14, "bold"))
+            key_label.grid(row=i+1, column=0, sticky="w", padx=10, pady=2)
+            value_label = tk.Label(master=info_frame, textvariable=value, font=("Helvetica", 14))
+            value_label.grid(row=i+1, column=1, sticky="w", padx=10, pady=2)
 
-        for label_text, str_var in self.info_vars.items():
-            frame = tk.Frame(self.info_frame)
-            frame.pack(anchor="w", pady=2)
-            tk.Label(frame, text=f"{label_text}:", font=("Helvetica", 10, "bold")).pack(side=tk.LEFT)
-            tk.Label(frame, textvariable=str_var, font=("Helvetica", 10)).pack(side=tk.LEFT, padx=5)
-
-
-
-        self.label = tk.Label(self.root)
-        self.label.pack(padx=10, pady=10)
-
+        # MENU
         menubar = tk.Menu(self.root)
         file_menu = tk.Menu(menubar, tearoff=0)
-        
         file_menu.add_command(label="Abrir Imagem", command=self.open_img)
         menubar.add_cascade(label="Arquivo", menu=file_menu)
         self.root.config(menu=menubar)
+
+        # SCROLL
+        self.root.bind("<MouseWheel>", self.on_zoom)     # Windows/MAC
+        self.root.bind("<Button-4>", self.on_zoom_linux) # Linux scroll up
+        self.root.bind("<Button-5>", self.on_zoom_linux) # Linux scroll down
 
     def open_img(self):
         initialdir = os.path.join(os.getcwd(), "dataset", "sag")
@@ -132,40 +159,62 @@ class GUI:
         filename = os.path.basename(filepath)
         mri_id = filename.split('_sag')[0]
         
+        self.set_info(mri_id)
+                
+        nifti_file = nib.load(filepath)
+        
+        data = np.rot90(nifti_file.get_fdata())
+        
+        self.image = Image.fromarray(data)
+        self.display_image()
+
+        
+    def set_info(self, mri_id: str):
         try:
             patient_data = self.df.loc[mri_id]
-            self.info_vars["Group"].set(patient_data.get("Group", "N/A"))
-            self.info_vars["Age"].set(patient_data.get("Age", "N/A"))
-            self.info_vars["M/F"].set(patient_data.get("M/F", "N/A"))
-            self.info_vars["MMSE"].set(patient_data.get("MMSE", "N/A"))
-            self.info_vars["CDR"].set(patient_data.get("CDR", "N/A"))
+            self.info["Group"].set(patient_data.get("Group", "N/A"))
+            self.info["Age"].set(patient_data.get("Age", "N/A"))
+            self.info["M/F"].set(patient_data.get("M/F", "N/A"))
+            self.info["MMSE"].set(patient_data.get("MMSE", "N/A"))
+            self.info["CDR"].set(patient_data.get("CDR", "N/A"))
         except KeyError:
-            for var in self.info_vars.values():
+            for var in self.info.values():
                 var.set("ID não encontrado")
-        
-        nifti_file = nib.load(filepath)
-        slice_rotated = nifti_file.get_fdata()
-        
-        slice_rotated = np.rot90(slice_rotated) # rotate 90 
-        
-        if np.max(slice_rotated) != np.min(slice_rotated):
-            slice_norm = (slice_rotated - np.min(slice_rotated)) / (np.max(slice_rotated) - np.min(slice_rotated)) * 255
-        else:
-            slice_norm = np.zeros_like(slice_rotated, dtype=np.uint8)
-                
-        slice_norm = slice_norm.astype(np.uint8)
-        pil_img = Image.fromarray(slice_norm)
-
-        pil_img = pil_img.resize((400, 400), Image.Resampling.LANCZOS)
-        tk_img = ImageTk.PhotoImage(pil_img)
-
-        self.label.config(image=tk_img)
-    
-        self.label.image = tk_img
-        
        
+       
+    def display_image(self):
+        if self.image is None:
+            return
+        
+        w, h = self.image.size
+        new_size = (int(w * self.zoom_factor), int(h * self.zoom_factor))
+        
+        resized_img = self.image.resize(new_size, Image.Resampling.LANCZOS)
+        tk_img = ImageTk.PhotoImage(resized_img)
+
+        self.image_label.config(image=tk_img)
+        self.image_label.image = tk_img
+        
+    def on_zoom(self, event):
+        """Detecta zoom com scroll do mouse no Windows/MAC"""
+        if event.delta > 0:
+            self.zoom_factor = min(self.zoom_factor * 1.1, self.max_zoom)
+        else:
+            self.zoom_factor = max(self.zoom_factor / 1.1, self.min_zoom)
+        self.display_image()
+
+    def on_zoom_linux(self, event):
+        """Detecta zoom com scroll do mouse no Linux"""
+        if event.num == 4:  # scroll up
+            self.zoom_factor = min(self.zoom_factor * 1.1, self.max_zoom)
+        elif event.num == 5:  # scroll down
+            self.zoom_factor = max(self.zoom_factor / 1.1, self.min_zoom)
+        self.display_image()
+    
     def run(self):
         self.root.mainloop()
+   
+   
         
 def prepare_and_split_data(df: pd.DataFrame, output_dir: str):
     """
